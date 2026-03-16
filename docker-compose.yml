@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://gfis:gfis_dev_password@postgres:5432/gfis
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - gfis-network
+
+  website:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.website
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NODE_ENV: development
+    depends_on:
+      - backend
+    networks:
+      - gfis-network
+    volumes:
+      - ./website/src:/app/src
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: gfis
+      POSTGRES_USER: gfis
+      POSTGRES_PASSWORD: gfis_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gfis-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gfis"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - gfis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  gfis-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
